@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChatGPT Account Switcher | Multi-Profile Manager for macOS</title>
+  <meta name="description" content="Switch between ChatGPT Personal, Work, and Client accounts on macOS with a single click. Zero repeated OTPs, unified local workspace in ~/.codex, and full Dock sync.">
+  <meta name="keywords" content="ChatGPT multi-account, ChatGPT desktop account switcher, switch ChatGPT accounts mac, OpenAI Codex multi account, ChatGPT 2FA OTP bypass, ChatGPT desktop profile manager">
+  <meta name="author" content="Muhammad Shafique">
+  <meta name="robots" content="index, follow">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ChatGPT Account Switcher | Multi-Profile Manager for macOS">
+  <meta property="og:description" content="Instant multi-account profile switching for the ChatGPT macOS desktop app with unified local workspace and zero repeated OTPs.">
+  <meta property="og:url" content="https://github.com/shafiquecbl/chatgpt-account-switcher">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ChatGPT Account Switcher for macOS">
+  <meta name="twitter:description" content="Switch between multiple ChatGPT desktop accounts without logging out or re-entering OTPs.">
+
+  <!-- Schema.org JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ChatGPT Account Switcher",
+    "operatingSystem": "macOS 12+",
+    "applicationCategory": "DeveloperApplication",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "description": "Seamless multi-account profile switcher and session manager for OpenAI ChatGPT Desktop on macOS.",
+    "softwareVersion": "2.0.0",
+    "author": {
+      "@type": "Person",
+      "name": "Muhammad Shafique",
+      "url": "https://github.com/shafiquecbl"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0B0E14;
+      --card-bg: #121722;
+      --card-hover: #161D2B;
+      --card-border: #1F2737;
+      --card-border-hover: #2F3B52;
+      --text-main: #F3F4F6;
+      --text-muted: #94A3B8;
+      --text-sub: #64748B;
+      --emerald: #10B981;
+      --emerald-glow: rgba(16, 185, 129, 0.15);
+      --emerald-dark: #059669;
+      --blue: #3B82F6;
+      --blue-soft: rgba(59, 130, 246, 0.12);
+      --danger: #EF4444;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, Menlo, Monaco, "SF Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: var(--bg);
+      background-image: radial-gradient(circle at 50% 0%, #151D2E 0%, transparent 50%);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 24px;
+    }
+
+    .wrapper {
+      width: 100%;
+      max-width: 960px;
+    }
+
+    /* Top Navigation Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 28px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--card-border);
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #10B981 0%, #047857 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+      flex-shrink: 0;
+    }
+
+    .brand-icon svg {
+      width: 24px;
+      height: 24px;
+      fill: #FFFFFF;
+    }
+
+    .brand-titles h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-titles p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Status Indicator */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-sub);
+    }
+
+    .status-dot.live {
+      background: var(--emerald);
+      box-shadow: 0 0 10px var(--emerald);
+      animation: pulse-ring 2s infinite;
+    }
+
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    /* Buttons */
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      line-height: 1;
+    }
+
+    .btn-create {
+      background: var(--emerald);
+      color: #FFFFFF;
+      padding: 10px 18px;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-create:hover {
+      background: var(--emerald-dark);
+      transform: translateY(-1px);
+    }
+
+    .btn-quit {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+      padding: 9px 14px;
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-quit:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+    }
+
+    .btn-delete {
+      background: transparent;
+      color: var(--text-sub);
+      padding: 6px;
+      border-radius: 8px;
+    }
+
+    .btn-delete:hover {
+      color: var(--danger);
+      background: rgba(239, 68, 68, 0.12);
+    }
+
+    /* Info Strip */
+    .info-strip {
+      background: rgba(16, 185, 129, 0.05);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      gap: 16px;
+    }
+
+    .info-strip-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      color: #CBD5E1;
+      line-height: 1.4;
+    }
+
+    .info-strip-left strong {
+      color: #A7F3D0;
+    }
+
+    .info-strip-left svg {
+      width: 18px;
+      height: 18px;
+      color: var(--emerald);
+      flex-shrink: 0;
+    }
+
+    .shortcut-pill {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      background: rgba(255, 255, 255, 0.06);
+      padding: 4px 8px;
+      border-radius: 6px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* Grid Section Header */
+    .grid-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding: 0 4px;
+    }
+
+    .grid-header span {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .btn-refresh {
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      padding: 4px 8px;
+    }
+
+    .btn-refresh:hover {
+      color: var(--text-main);
+    }
+
+    /* Cards Grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+      gap: 18px;
+      margin-bottom: 36px;
+    }
+
+    @media (max-width: 640px) {
+      .cards-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .card:hover {
+      border-color: var(--card-border-hover);
+      background: var(--card-hover);
+      transform: translateY(-2px);
+    }
+
+    .card.active-card {
+      border-color: var(--emerald);
+      box-shadow: 0 0 25px var(--emerald-glow), 0 4px 20px rgba(0, 0, 0, 0.35);
+    }
+
+    /* Card Top */
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .user-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: #1E293B;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: #F8FAFC;
+      flex-shrink: 0;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .user-avatar.primary {
+      background: linear-gradient(135deg, #10B981 0%, #065F46 100%);
+      color: #FFFFFF;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+    }
+
+    .user-avatar.secondary {
+      background: linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%);
+      color: #FFFFFF;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+    }
+
+    .user-details {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .user-name-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .user-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #FFFFFF;
+      letter-spacing: -0.01em;
+    }
+
+    .active-pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34D399;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .user-email-text {
+      font-size: 13px;
+      color: #60A5FA;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 1px;
+    }
+
+    .user-email-text svg {
+      width: 13px;
+      height: 13px;
+      color: #60A5FA;
+    }
+
+    .user-profile-id {
+      font-size: 12px;
+      color: var(--text-sub);
+      font-family: var(--font-mono);
+      margin-top: 1px;
+    }
+
+    /* Card Badges Row */
+    .card-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 22px;
+    }
+
+    .chip {
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .chip.synced {
+      background: rgba(56, 189, 248, 0.08);
+      border-color: rgba(56, 189, 248, 0.25);
+      color: #38BDF8;
+    }
+
+    .chip.synced svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    /* Card Bottom Action Bar */
+    .card-footer {
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .btn-switch {
+      flex: 1;
+      background: #2563EB;
+      color: #FFFFFF;
+      padding: 11px 18px;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+      border-radius: 10px;
+    }
+
+    .btn-switch:hover {
+      background: #1D4ED8;
+      transform: translateY(-1px);
+    }
+
+    .btn-active-state {
+      flex: 1;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34D399;
+      padding: 11px 18px;
+      cursor: default;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    /* Modal Backdrop */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-box {
+      background: #161C28;
+      border: 1px solid #283347;
+      border-radius: 18px;
+      padding: 30px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+    }
+
+    .modal-box h2 {
+      font-size: 19px;
+      font-weight: 700;
+      color: #FFFFFF;
+      margin-bottom: 4px;
+    }
+
+    .modal-box p.desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 22px;
+    }
+
+    .form-row {
+      margin-bottom: 18px;
+    }
+
+    .form-row label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #E2E8F0;
+      margin-bottom: 6px;
+    }
+
+    .form-row input[type="text"] {
+      width: 100%;
+      background: #0D111A;
+      border: 1px solid #263147;
+      color: var(--text-main);
+      padding: 11px 14px;
+      border-radius: 9px;
+      font-size: 14px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .form-row input[type="text"]:focus {
+      border-color: #3B82F6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+
+    .workspace-toggle {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 24px;
+    }
+
+    .workspace-toggle input[type="checkbox"] {
+      margin-top: 3px;
+      accent-color: var(--emerald);
+      width: 16px;
+      height: 16px;
+    }
+
+    .workspace-toggle-text strong {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #FFFFFF;
+    }
+
+    .workspace-toggle-text p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+
+    .modal-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    /* Notification Toast */
+    .toast-box {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: #1E2738;
+      border: 1px solid #334155;
+      color: #FFFFFF;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 200;
+    }
+
+    .toast-box.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast-box.success {
+      border-color: var(--emerald);
+    }
+
+    .toast-box.error {
+      border-color: var(--danger);
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #FFFFFF;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="wrapper">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1683a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4947zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3428 7.897a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1683a.0757.0757 0 0 1-.071 0l-4.8303-2.7866A4.504 4.504 0 0 1 2.3428 7.897zm16.5996 3.8558L13.1038 8.3843l2.0153-1.1635a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.4017-.6863zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1635a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.4592a.7948.7948 0 0 0-.3927.6813v6.7225zm1.1404-1.9728l2.5532-1.4746 2.5532 1.4746v2.9491l-2.5532 1.4746-2.5532-1.4746v-2.9491z"/>
+          </svg>
+        </div>
+        <div class="brand-titles">
+          <h1>ChatGPT Account Switcher</h1>
+          <p>Seamlessly switch accounts with zero repeated OTPs &bull; Unified local workspace</p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="status-badge">
+          <span class="status-dot" id="headerDot"></span>
+          <span id="headerStatusText">Checking...</span>
+        </div>
+        <button class="btn-quit" id="btnQuit" onclick="quitChatGPT()" style="display: none;">
+          Quit App
+        </button>
+        <button class="btn-create" onclick="openModal()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Add Account
+        </button>
+      </div>
+    </header>
+
+    <!-- Information Banner -->
+    <div class="info-strip">
+      <div class="info-strip-left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <span>
+          <strong>Single Unified Directory:</strong> All your local sessions, chats, worktrees, and SQLite databases remain in <code>~/.codex</code>. Switch anytime without disturbing your project files.
+        </span>
+      </div>
+      <span class="shortcut-pill">⌘R Refresh</span>
+    </div>
+
+    <!-- Section Title -->
+    <div class="grid-header">
+      <span>Saved Profiles</span>
+      <button class="btn-refresh" onclick="fetchAccounts()">
+        &#8635; Refresh
+      </button>
+    </div>
+
+    <!-- Cards Grid -->
+    <div class="cards-grid" id="cardsGrid">
+      <!-- Injected by JavaScript -->
+    </div>
+  </div>
+
+  <!-- Add Account Modal -->
+  <div class="modal-backdrop" id="addAccountModal">
+    <div class="modal-box">
+      <h2>Add New Account</h2>
+      <p class="desc">Enter a profile name. The manager's OTP is required only once during initial setup.</p>
+
+      <form onsubmit="handleCreate(event)">
+        <div class="form-row">
+          <label>Display Name</label>
+          <input type="text" id="inputDisplayName" placeholder="e.g. Work Account" required oninput="generateSlug()">
+        </div>
+
+        <div class="form-row">
+          <label>Profile Identifier (Folder Suffix)</label>
+          <input type="text" id="inputSlug" placeholder="e.g. work" required style="font-family: var(--font-mono);">
+        </div>
+
+        <div class="workspace-toggle">
+          <input type="checkbox" id="checkWorkspaceSync" checked>
+          <div class="workspace-toggle-text">
+            <strong>Share Local Workspace & Sessions (Recommended)</strong>
+            <p>Retain full access to all your current local chats, projects, worktrees, and databases.</p>
+          </div>
+        </div>
+
+        <div class="modal-buttons">
+          <button type="button" class="btn-quit" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn-create" id="btnSubmitModal">
+            Create & Launch
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast-box" id="toastContainer">
+    <span id="toastMessageText">Done</span>
+  </div>
+
+  <script>
+    let isWorking = false;
+
+    function toast(text, type = 'success') {
+      const el = document.getElementById('toastContainer');
+      el.className = `toast-box ${type} show`;
+      document.getElementById('toastMessageText').textContent = text;
+      setTimeout(() => {
+        el.className = 'toast-box';
+      }, 3500);
+    }
+
+    function openModal() {
+      document.getElementById('addAccountModal').classList.add('open');
+      document.getElementById('inputDisplayName').focus();
+    }
+
+    function closeModal() {
+      document.getElementById('addAccountModal').classList.remove('open');
+    }
+
+    function generateSlug() {
+      const name = document.getElementById('inputDisplayName').value;
+      const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-');
+      document.getElementById('inputSlug').value = slug;
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+      if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+        e.preventDefault();
+        fetchAccounts();
+      }
+    });
+
+    async function fetchAccounts() {
+      try {
+        const res = await fetch('/api/accounts');
+        const data = await res.json();
+        renderCards(data.accounts, data.status);
+      } catch (err) {
+        console.error('Fetch failed:', err);
+      }
+    }
+
+    function renderCards(accounts, status) {
+      const grid = document.getElementById('cardsGrid');
+      grid.innerHTML = '';
+
+      // Update header status
+      const dot = document.getElementById('headerDot');
+      const text = document.getElementById('headerStatusText');
+      const quitBtn = document.getElementById('btnQuit');
+
+      if (status.running) {
+        dot.className = 'status-dot live';
+        const activeAcc = accounts.find(a => a.is_active);
+        const name = activeAcc ? (activeAcc.name || activeAcc.label) : status.active_account;
+        text.textContent = `Running: ${name}`;
+        quitBtn.style.display = 'inline-flex';
+      } else {
+        dot.className = 'status-dot';
+        text.textContent = 'ChatGPT Stopped';
+        quitBtn.style.display = 'none';
+      }
+
+      accounts.forEach(acc => {
+        const card = document.createElement('div');
+        card.className = `card ${acc.is_active ? 'active-card' : ''}`;
+
+        const initial = (acc.name || acc.label || 'U').charAt(0).toUpperCase();
+        const avatarClass = acc.is_primary ? 'primary' : 'secondary';
+
+        card.innerHTML = `
+          <div>
+            <div class="card-top">
+              <div class="user-profile">
+                <div class="user-avatar ${avatarClass}">${initial}</div>
+                <div class="user-details">
+                  <div class="user-name-row">
+                    <span class="user-name">${acc.name || acc.label}</span>
+                    ${acc.is_active ? `
+                      <span class="active-pill">
+                        <svg width="6" height="6" viewBox="0 0 6 6" fill="currentColor">
+                          <circle cx="3" cy="3" r="3" />
+                        </svg>
+                        Active
+                      </span>
+                    ` : ''}
+                  </div>
+                  ${acc.email ? `
+                    <div class="user-email-text">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                      </svg>
+                      ${acc.email}
+                    </div>
+                  ` : `<div style="font-size: 12px; color: var(--text-sub); margin-top: 2px;">Initial login required</div>`}
+                  <div class="user-profile-id">${acc.label || (acc.id === 'primary' ? 'Primary Profile' : acc.id)}</div>
+                </div>
+              </div>
+
+              ${!acc.is_primary ? `
+                <button class="btn-delete" title="Delete Account Profile" onclick="deleteAccount('${acc.id}', '${acc.label || acc.name}')">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                </button>
+              ` : ''}
+            </div>
+
+            <div class="card-chips">
+              <span class="chip">${acc.id === 'primary' ? '~/.codex' : '~/.codex-' + acc.id}</span>
+              ${acc.shared_history ? `
+                <span class="chip synced">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                  </svg>
+                  Unified Workspace
+                </span>
+              ` : `
+                <span class="chip">Isolated History</span>
+              `}
+            </div>
+          </div>
+
+          <div class="card-footer">
+            ${acc.is_active ? `
+              <div class="btn-active-state">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: -2px; margin-right: 6px;">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                Currently Active
+              </div>
+            ` : `
+              <button class="btn-switch" onclick="switchAccount('${acc.id}', this)">
+                Switch to this Account &rarr;
+              </button>
+            `}
+          </div>
+        `;
+
+        grid.appendChild(card);
+      });
+    }
+
+    async function switchAccount(accountId, btn) {
+      if (isWorking) return;
+      isWorking = true;
+
+      const prev = btn.innerHTML;
+      btn.innerHTML = '<div class="spinner"></div> Switching...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/switch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account: accountId })
+        });
+        const data = await res.json();
+        if (data.error) {
+          toast(`Failed: ${data.error}`, 'error');
+        } else {
+          toast(`Switched profile! ChatGPT is launching...`);
+          await fetchAccounts();
+        }
+      } catch (err) {
+        toast(`Error: ${err.message}`, 'error');
+      } finally {
+        isWorking = false;
+        btn.innerHTML = prev;
+        btn.disabled = false;
+      }
+    }
+
+    async function handleCreate(e) {
+      e.preventDefault();
+      const id = document.getElementById('inputSlug').value.trim();
+      const name = document.getElementById('inputDisplayName').value.trim();
+      const shared = document.getElementById('checkWorkspaceSync').checked;
+
+      const submitBtn = document.getElementById('btnSubmitModal');
+      submitBtn.innerHTML = '<div class="spinner"></div> Launching...';
+      submitBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, name, symlink_history: shared })
+        });
+        const data = await res.json();
+        if (data.error) {
+          toast(`Error: ${data.error}`, 'error');
+        } else {
+          toast(`Account "${name}" created! Sign in once in ChatGPT.`);
+          closeModal();
+          document.getElementById('inputDisplayName').value = '';
+          document.getElementById('inputSlug').value = '';
+          await fetchAccounts();
+        }
+      } catch (err) {
+        toast(`Failed: ${err.message}`, 'error');
+      } finally {
+        submitBtn.innerHTML = 'Create & Launch';
+        submitBtn.disabled = false;
+      }
+    }
+
+    async function deleteAccount(accountId, name) {
+      if (!confirm(`Are you sure you want to remove the profile for "${name}"?\nAll local sessions in ~/.codex remain completely safe.`)) return;
+
+      try {
+        const res = await fetch('/api/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account: accountId })
+        });
+        const data = await res.json();
+        if (data.error) {
+          toast(`Delete error: ${data.error}`, 'error');
+        } else {
+          toast(`Account "${name}" removed.`);
+          await fetchAccounts();
+        }
+      } catch (err) {
+        toast(`Failed: ${err.message}`, 'error');
+      }
+    }
+
+    async function quitChatGPT() {
+      try {
+        await fetch('/api/quit', { method: 'POST' });
+        toast('ChatGPT closed.');
+        await fetchAccounts();
+      } catch (err) {
+        toast(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    // Initial load & poll every 3s
+    fetchAccounts();
+    setInterval(fetchAccounts, 3000);
+  </script>
+</body>
+</html>
