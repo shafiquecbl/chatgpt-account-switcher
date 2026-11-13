@@ -256,7 +256,7 @@ def list_all_accounts():
     return accounts, status
 
 def stop_chatgpt():
-    """Gracefully terminates any running ChatGPT desktop instances on macOS or Windows."""
+    """Gracefully terminates any running ChatGPT desktop instances on macOS or Windows, waiting for locks to release."""
     if IS_WINDOWS:
         try:
             subprocess.run(["taskkill", "/IM", "ChatGPT.exe"], capture_output=True)
@@ -265,17 +265,22 @@ def stop_chatgpt():
             pass
     else:
         try:
-            subprocess.run(["osascript", "-e", 'quit app "ChatGPT"'], capture_output=True, timeout=2)
+            subprocess.run(["osascript", "-e", 'quit app "ChatGPT"'], capture_output=True, timeout=3)
         except Exception:
             pass
     
-    time.sleep(0.5)
-    
+    # Wait gracefully for up to 3 seconds for processes to flush cookies and state
+    for _ in range(6):
+        time.sleep(0.5)
+        info = get_running_chatgpt_info()
+        if not info["running"]:
+            return
+            
     info = get_running_chatgpt_info()
     if info["running"] and info["pid"]:
         try:
             os.kill(info["pid"], 15 if not IS_WINDOWS else 9)
-            time.sleep(1)
+            time.sleep(0.8)
         except Exception:
             pass
             
@@ -286,6 +291,205 @@ def stop_chatgpt():
             time.sleep(0.5)
         except Exception:
             pass
+
+def save_active_account_auth():
+    """
+    Saves the current ~/.codex/auth.json back to the active account profile directory.
+    Prevents token expiry, stale session overwrites, and repeated OTP challenges.
+    """
+    current_auth = PRIMARY_HOME / "auth.json"
+    if not current_auth.exists():
+        return
+    
+    jwt_info = get_jwt_details(current_auth)
+    current_email = (jwt_info.get("email") or "").lower() if jwt_info else ""
+    current_sub = (jwt_info.get("account_id") or "").lower() if jwt_info else ""
+
+    active_link_id = None
+    target_link = get_link_target(PRIMARY_PROFILE_LINK)
+    if target_link:
+        base = os.path.basename(str(target_link).rstrip('/\\')).lower()
+        if base.startswith("codex-"):
+            active_link_id = base[6:]
+
+    matched_id = None
+    # 1. Match against known auth.json files by email or account ID
+    p_jwt = get_jwt_details(HOME / ".codex-primary" / "auth.json")
+    if p_jwt and current_email and (p_jwt.get("email", "").lower() == current_email):
+        matched_id = "primary"
+    
+    if not matched_id and current_email:
+        for p in HOME.glob(".codex-*"):
+            if p.is_dir() and ".backup" not in p.name and ".bak" not in p.name and p.name != ".codex-multi-account":
+                s_jwt = get_jwt_details(p / "auth.json")
+                if s_jwt and (s_jwt.get("email", "").lower() == current_email):
+                    matched_id = p.name[7:].lower()
+                    break
+
+    # 2. Check metadata registry against email prefix/keyword if unassigned
+    if not matched_id and current_email:
+        meta = load_metadata()
+        for acc_id in meta:
+            if acc_id.lower() in current_email or current_email.split('@')[0] in acc_id.lower():
+                matched_id = acc_id.lower()
+                break
+
+    # 3. Fallback to active symlink target
+    if not matched_id and active_link_id:
+        matched_id = active_link_id
+    
+    save_id = matched_id or "primary"
+    dest_dir = HOME / ".codex-primary" if save_id in ["primary", "default"] else HOME / f".codex-{save_id}"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(current_auth, dest_dir / "auth.json")
+    except Exception as e:
+        print(f"Error saving active auth to {dest_dir}: {e}")
+
+def sync_global_state_projects():
+    """
+    Ensures all local projects and workspaces are shared across all accounts.
+    Merges project state in ~/.codex/.codex-global-state.json between root (active owner)
+    and all inactive accounts, so switching accounts never hides projects in the sidebar.
+    """
+    global_state_path = PRIMARY_HOME / ".codex-global-state.json"
+    if not global_state_path.exists():
+        return
+    try:
+        with open(global_state_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        ars = data.get("electron-account-renderer-state-v1", {})
+        inactive = ars.get("inactive", {})
+        
+        # 1. Merge local-projects
+        merged_projects = {}
+        if isinstance(data.get("local-projects"), dict):
+            merged_projects.update(data["local-projects"])
+        for acc_key, acc_val in inactive.items():
+            acc_globals = acc_val.get("globals", {})
+            if isinstance(acc_globals.get("local-projects"), dict):
+                merged_projects.update(acc_globals["local-projects"])
+        
+        if not merged_projects:
+            return
+        
+        # 2. Merge project-order
+        merged_order = []
+        def add_order(order_list):
+            if isinstance(order_list, list):
+                for pid in order_list:
+                    if pid in merged_projects and pid not in merged_order:
+                        merged_order.append(pid)
+
+        add_order(data.get("project-order"))
+        for acc_key, acc_val in inactive.items():
+            add_order(acc_val.get("globals", {}).get("project-order"))
+        for pid in merged_projects:
+            if pid not in merged_order:
+                merged_order.append(pid)
+
+        # 3. Merge project-appearances
+        merged_appearances = {}
+        if isinstance(data.get("project-appearances"), dict):
+            merged_appearances.update(data["project-appearances"])
+        for acc_key, acc_val in inactive.items():
+            if isinstance(acc_val.get("globals", {}).get("project-appearances"), dict):
+                merged_appearances.update(acc_val["globals"]["project-appearances"])
+
+        # 4. Merge dictionary keys
+        dict_keys = [
+            "sidebar-project-thread-orders",
+            "thread-project-assignments",
+            "thread-project-membership-host-ids",
+            "thread-writable-roots",
+            "thread-workspace-root-hints",
+            "thread-projectless-output-directories",
+            "app-server-projects-migration-by-host",
+            "app-server-project-id-by-legacy-project-id-by-host",
+            "app-server-migrated-pinned-thread-ids-by-host",
+            "queued-follow-ups"
+        ]
+        merged_dicts = {}
+        for k in dict_keys:
+            m = {}
+            if isinstance(data.get(k), dict):
+                m.update(data[k])
+            for acc_key, acc_val in inactive.items():
+                if isinstance(acc_val.get("globals", {}).get(k), dict):
+                    m.update(acc_val["globals"][k])
+            merged_dicts[k] = m
+
+        # 5. Merge list keys
+        list_keys = ["pinned-thread-ids", "projectless-thread-ids"]
+        merged_lists = {}
+        for k in list_keys:
+            l = []
+            if isinstance(data.get(k), list):
+                for item in data[k]:
+                    if item not in l:
+                        l.append(item)
+            for acc_key, acc_val in inactive.items():
+                if isinstance(acc_val.get("globals", {}).get(k), list):
+                    for item in acc_val["globals"][k]:
+                        if item not in l:
+                            l.append(item)
+            merged_lists[k] = l
+
+        # Apply merged project keys to root (active owner)
+        data["local-projects"] = merged_projects
+        data["project-order"] = merged_order
+        data["project-appearances"] = merged_appearances
+        for k, v in merged_dicts.items():
+            if v:
+                data[k] = v
+        for k, v in merged_lists.items():
+            if v:
+                data[k] = v
+
+        # Apply merged project keys to all inactive accounts
+        for acc_key in inactive:
+            inactive[acc_key].setdefault("globals", {})["local-projects"] = merged_projects
+            inactive[acc_key]["globals"]["project-order"] = merged_order
+            inactive[acc_key]["globals"]["project-appearances"] = merged_appearances
+            for k, v in merged_dicts.items():
+                if v:
+                    inactive[acc_key]["globals"][k] = v
+            for k, v in merged_lists.items():
+                if v:
+                    inactive[acc_key]["globals"][k] = v
+
+        # Write atomically
+        temp_file = global_state_path.with_name(f".{global_state_path.name}.tmp")
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        temp_file.replace(global_state_path)
+        shutil.copy2(global_state_path, global_state_path.with_suffix(".json.bak"))
+    except Exception as e:
+        print(f"Warning: Failed to sync global state projects: {e}")
+
+def safe_rmtree(path):
+    """Safely removes directory tree even if it contains read-only files or broken symlinks."""
+    def handle_remove_readonly(func, p, exc_info):
+        try:
+            os.chmod(p, 0o777)
+            func(p)
+        except Exception:
+            pass
+    p = Path(path)
+    if p.is_symlink() or os.path.islink(p):
+        try:
+            p.unlink()
+        except Exception:
+            pass
+    elif p.exists():
+        try:
+            shutil.rmtree(p, onerror=handle_remove_readonly)
+        except Exception:
+            try:
+                shutil.rmtree(p, ignore_errors=True)
+            except Exception:
+                pass
 
 def link_profile_directory(link_path, target_path):
     """Links primary profile to target using POSIX symlinks on macOS or Directory Junctions on Windows."""
@@ -301,7 +505,7 @@ def link_profile_directory(link_path, target_path):
         if link_path.is_symlink():
             link_path.unlink()
         elif link_path.exists():
-            shutil.rmtree(link_path)
+            safe_rmtree(link_path)
         link_path.symlink_to(target_path)
 
 def launch_native_chatgpt():
@@ -321,11 +525,22 @@ def launch_native_chatgpt():
 def switch_to_account(account_id):
     """
     Sets the active account globally!
-    Updates the default profile symlink and ~/.codex/auth.json so that opening
-    ChatGPT from Dashboard, Dock, Taskbar, or Spotlight ALWAYS uses this active account.
+    1. Gracefully stops ChatGPT and waits for cookie/DB flush.
+    2. Saves active tokens from ~/.codex/auth.json back to the active account folder.
+    3. Synchronizes all projects across accounts in .codex-global-state.json.
+    4. Updates the default profile symlink/junction.
+    5. Restores target account's auth.json to ~/.codex/auth.json.
+    6. Clears stale singleton locks and launches ChatGPT.
     """
+    # 1. Gracefully stop ChatGPT and release locks
     stop_chatgpt()
-    time.sleep(0.5)
+    time.sleep(0.3)
+
+    # 2. Save currently active account's tokens back before switching
+    save_active_account_auth()
+
+    # 3. Synchronize projects so both accounts see all projects in sidebar
+    sync_global_state_projects()
 
     profile_parent = PRIMARY_PROFILE_LINK.parent
     if account_id in ["primary", "default"]:
@@ -335,7 +550,7 @@ def switch_to_account(account_id):
         target_profile = profile_parent / f"Codex-{account_id}"
         target_auth = HOME / f".codex-{account_id}" / "auth.json"
 
-    # 1. Preserve original profile if it's a real directory
+    # 4. Preserve original profile if it's a real directory
     if not (PRIMARY_PROFILE_LINK.is_symlink() or os.path.islink(PRIMARY_PROFILE_LINK)) and PRIMARY_PROFILE_LINK.exists():
         primary_dest = profile_parent / "Codex-primary"
         if not primary_dest.exists():
@@ -345,13 +560,21 @@ def switch_to_account(account_id):
             primary_auth.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(PRIMARY_HOME / "auth.json", primary_auth)
 
-    # 2. Update directory link (Symlink on macOS, Junction on Windows)
+    # 5. Update directory link (Symlink on macOS, Junction on Windows)
     link_profile_directory(PRIMARY_PROFILE_LINK, target_profile)
 
-    # 3. Update ~/.codex/auth.json
+    # 6. Update ~/.codex/auth.json
     if target_auth.exists():
         PRIMARY_HOME.mkdir(parents=True, exist_ok=True)
         shutil.copy2(target_auth, PRIMARY_HOME / "auth.json")
+    else:
+        # Clean auth.json for newly created account so it starts fresh without inheriting previous account's token
+        cur_auth = PRIMARY_HOME / "auth.json"
+        if cur_auth.exists():
+            try:
+                cur_auth.unlink()
+            except Exception:
+                pass
 
     # Clear stale profile singletons
     for rel in ["SingletonLock", "SingletonSocket", "SingletonCookie"]:
@@ -362,7 +585,7 @@ def switch_to_account(account_id):
             except Exception:
                 pass
 
-    # 4. Launch ChatGPT natively
+    # 7. Launch ChatGPT natively
     launch_native_chatgpt()
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -401,6 +624,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             info = get_running_chatgpt_info()
             self._send_json(info)
         elif path == "/api/accounts":
+            sync_global_state_projects()
             accounts, status = list_all_accounts()
             self._send_json({"accounts": accounts, "status": status})
         else:
@@ -497,9 +721,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                         text=True
                     )
                 
-                # Clean up directories
-                shutil.rmtree(HOME / f".codex-{account_id}", ignore_errors=True)
-                shutil.rmtree(PRIMARY_PROFILE_LINK.parent / f"Codex-{account_id}", ignore_errors=True)
+                # Clean up directories safely
+                safe_rmtree(HOME / f".codex-{account_id}")
+                safe_rmtree(PRIMARY_PROFILE_LINK.parent / f"Codex-{account_id}")
 
                 meta = load_metadata()
                 if account_id in meta:
@@ -520,6 +744,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_error(404, "Not Found")
 
 def main():
+    sync_global_state_projects()
     server = HTTPServer(("127.0.0.1", PORT), RequestHandler)
     platform_name = "Windows" if IS_WINDOWS else ("macOS" if IS_MAC else "Linux")
     print(f"ChatGPT Account Switcher running for {platform_name} at http://localhost:{PORT}")
